@@ -20,3 +20,7 @@ venv/
 # sauvegardes locales
 bridge_server.py.bak_*
 gpt_bridge_*.py.bak_*
+norm_in_*.txt
+journal_*.csv
+logs/**
+tailing/**
