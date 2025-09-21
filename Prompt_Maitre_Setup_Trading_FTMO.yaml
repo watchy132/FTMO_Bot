@@ -1,0 +1,24 @@
+# Sortie OBLIGATOIRE en JSON strict. Clés requises: setups=[{symbol,direction,entry,sl,tp,comment}]
+# direction ∈ {"buy","sell"} ; nombres en décimal avec point.
+instruction: >
+  Analyse le marché et propose 1 à 3 setups maximum. Respecte FTMO.
+  Donne UNIQUEMENT un JSON avec la clé "setups".
+schema:
+  type: object
+  properties:
+    setups:
+      type: array
+      items:
+        type: object
+        properties:
+          symbol: { type: string }
+          direction: { type: string, enum: ["buy","sell"] }
+          entry: { type: number }
+          sl: { type: number }
+          tp: { type: number }
+          comment: { type: string }
+        required: [symbol, direction, entry, sl, tp]
+  required: [setups]
+examples:
+  - setups:
+      - {symbol: "EURUSD", direction: "buy", entry: 1.0900, sl: 1.0880, tp: 1.0940, comment: "S2 pullback"}

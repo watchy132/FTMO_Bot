@@ -1,0 +1,125 @@
+import json
+from typing import Any, Dict, List, Tuple, Union
+
+# --- Normalisation d'un setup unitaire ---
+def _to_float(x):
+    if x is None: return None
+    if isinstance(x, (int, float)): return float(x)
+    if isinstance(x, str):
+        try:
+            return float(x.strip())
+        except:
+            return None
+    return None
+
+def normalize_setup(s: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+    if not isinstance(s, dict):
+        return {}, "REJECT: not a dict"
+
+    symbol = s.get("symbol") or s.get("ticker")
+    direction = s.get("direction") or s.get("side")
+    entry = _to_float(s.get("entry") or s.get("price") or s.get("entry_price"))
+    sl    = _to_float(s.get("sl")    or s.get("stop_loss") or s.get("stop"))
+    tp    = _to_float(s.get("tp")    or s.get("take_profit") or s.get("target"))
+    rrr   = _to_float(s.get("rrr"))
+    tf    = s.get("timeframe") or s.get("tf") or "H1"
+    conf  = _to_float(s.get("confidence"))
+
+    if direction not in ("BUY", "SELL"):
+        return {}, "REJECT: direction"
+    if not symbol:
+        return {}, "REJECT: symbol"
+    if any(v is None for v in (entry, sl, tp)):
+        return {}, "REJECT: prices"
+
+    return ({
+        "symbol": symbol,
+        "timeframe": tf,
+        "direction": direction,
+        "entry": entry,
+        "sl": sl,
+        "tp": tp,
+        "rrr": rrr,
+        "confidence": conf,
+        "raw": s
+    }, "OK")
+
+# --- Coercition de la sortie LLM en schéma stable ---
+def _coerce_decide_response(raw: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+
+    # action
+    action = (raw.get("action") or "hold")
+    if isinstance(action, str):
+        a = action.strip().lower()
+        if a in ("none", "skip"):
+            a = "hold"
+        out["action"] = a
+    else:
+        out["action"] = "hold"
+
+    # setups: accepte 'setup' ou 'setups', dict | list | bool | None
+    setup_obj = raw.get("setups", raw.get("setup", []))
+    setups_list: List[Dict[str, Any]] = []
+    if isinstance(setup_obj, dict):
+        setups_list = [setup_obj]
+    elif isinstance(setup_obj, list):
+        setups_list = [x for x in setup_obj if isinstance(x, dict)]
+    else:
+        # bool/None/str/etc. -> pas de setups
+        setups_list = []
+
+    # normaliser
+    norm = [normalize_setup(s) for s in setups_list]
+    candidates = [s for s, st in norm if not str(st).startswith("REJECT")]
+    out["setups"] = candidates  # déjà normalisés
+
+    # risk (par défaut 0.005 si non-numérique)
+    rv = raw.get("risk", 0.005)
+    out["risk"] = rv if isinstance(rv, (int, float)) else 0.005
+
+    # expires_at (laisser tel quel si fourni)
+    out["expires_at"] = raw.get("expires_at")
+
+    return out
+
+# --- Point d’entrée appelé par le serveur bridge (existant) ---
+def decide(payload_json: str) -> str:
+    """
+    Reçoit un JSON (string) venant du client (runner/test),
+    appelle le LLM (dans ton infra existante), puis renvoie un JSON propre.
+    Ici on ne touche PAS à l’appel LLM (déjà présent dans ton projet) :
+    on part du principe que tu as une fonction llm_decide(payload_dict) -> dict
+    qui renvoie la sortie 'raw' du modèle.
+    """
+    try:
+        payload = json.loads(payload_json)
+    except Exception:
+        # si le client envoie autre chose qu’un JSON
+        return json.dumps({"action": "hold", "setups": [], "risk": 0.005, "expires_at": None})
+
+    # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    # Remplace CETTE fonction par ton appel actuel au LLM si besoin !
+    # Pour l’instant, on pique la clé 'mock' pour laisser passer la structure.
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    raw = mock_llm_decide(payload)
+
+    clean = _coerce_decide_response(raw)
+    return json.dumps(clean, ensure_ascii=False)
+
+# --- MOCK: remplace par ton appel réel (OpenAI, etc.) ---
+def mock_llm_decide(payload: Dict[str, Any]) -> Dict[str, Any]:
+    # Si le modèle te renvoie parfois 'setup': false / 'action': 'none'
+    # ce mock montre ce que ça donnerait :
+    return {
+        "action": "none",           # sera coercé en "hold"
+        "expires_at": None,
+        "setup": False,             # sera coercé en []
+        "risk": "low"               # sera coercé en 0.005
+    }
+
+# --- Si tu compiles ce fichier sous Wine/mac, laisse un point d’entrée simple ---
+if __name__ == "__main__":
+    # petit test manuel
+    sample = json.dumps({"symbol":"EURUSD","price":1.10,"timeframe":"M5"})
+    print(decide(sample))

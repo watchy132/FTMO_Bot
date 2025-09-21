@@ -1,0 +1,36 @@
+#!/bin/zsh
+set -euo pipefail
+ROOT="$HOME/FTMO_Bot"; LOGS="$ROOT/logs"; mkdir -p "$LOGS"
+
+case "${1:-}" in
+  bridge)
+    case "${2:-}" in
+      start)
+        [ -f "$ROOT/.venv/bin/activate" ] && . "$ROOT/.venv/bin/activate"
+        set -a; [ -f "$ROOT/.env" ] && . "$ROOT/.env"; set +a
+        nohup python "$ROOT/bridge_server.py" >> "$LOGS/bridge.log" 2>&1 &
+        echo $! > /tmp/bridge.pid
+        until curl -sS http://127.0.0.1:8765/health >/dev/null 2>&1; do sleep 0.5; done
+        echo "bridge: healthy"
+        ;;
+      stop)
+        pid="$(cat /tmp/bridge.pid 2>/dev/null || true)"; [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null || true
+        rm -f /tmp/bridge.pid; echo "bridge: stopped"
+        ;;
+      *) echo "usage: $0 bridge start|stop"; exit 2;;
+    esac;;
+  hc)    curl -sS http://127.0.0.1:8765/health | python3 -m json.tool;;
+  probe) curl -sS -X POST http://127.0.0.1:8765/decide -H 'Content-Type: application/json' -d '{"probe":true}' | python3 -m json.tool;;
+  killport) port="${2:-8765}"; lsof -i :"$port" -t 2>/dev/null | xargs -r kill -9 || true;;
+  bot)
+    if [[ "${2:-}" == "run" ]]; then
+      set -a; [ -f "$ROOT/.env" ] && . "$ROOT/.env"; set +a
+      cd "$ROOT"
+      /Users/ayoubzahour/pywin -X dev -X faulthandler -u runner.py --symbol "${3:-EURUSD}" --minutes "${4:-5}" --max-trades "${5:-1}" --lots "${6:-0.01}"
+    else
+      echo "usage: $0 bot run SYMBOL MIN MAXTRADES LOTS"; exit 2
+    fi;;
+  logs)  which="${2:-bridge}"; tail -n 200 "$LOGS/${which}.log";;
+  keycheck) set -a; [ -f "$ROOT/.env" ] && . "$ROOT/.env"; set +a; /Users/ayoubzahour/pywin -u -c "import os; print(bool(os.getenv('OPENAI_API_KEY')))";;
+  *) echo "usage: $0 {bridge start|bridge stop|hc|probe|killport [PORT]|bot run SYMBOL MIN MAX LOTS|logs [bridge|bot]|keycheck}"; exit 2;;
+esac

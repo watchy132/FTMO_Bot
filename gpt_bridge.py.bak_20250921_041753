@@ -1,0 +1,444 @@
+from __future__ import annotations
+import os, time, json, re
+from typing import Any, Dict, Optional, Tuple, List
+import requests
+
+# ===== Config =====
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL   = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+LLM_TIMEOUT_S  = float(os.getenv("LLM_TIMEOUT_S", "20"))
+
+# ===== Utils =====
+def _now_ms() -> int: return int(time.time()*1000)
+def _ok(d: Dict[str, Any]) -> Dict[str, Any]:
+    d.setdefault("ok", True); d.setdefault("ts", _now_ms()); return d
+
+def _to_float(x):
+    if x is None: return None
+    if isinstance(x,(int,float)): return float(x)
+    if isinstance(x,str):
+        try: return float(x.strip())
+        except: return None
+    return None
+
+# ===== Normalisation =====
+def _extract_json(txt: str) -> Optional[Dict[str, Any]]:
+    m = _JSON_RE.search(txt or "")
+    if not m: return None
+    try: return json.loads(m.group(0))
+    except Exception: return None
+
+def _llm_decide(symbol: str) -> Tuple[Optional[Dict[str,Any]], str]:
+    if not OPENAI_API_KEY: return None, "OPENAI_API_KEY missing"
+    url = "https://api.openai.com/v1/chat/completions"
+    org = os.getenv("OPENAI_ORG", "")
+    proj = os.getenv("OPENAI_PROJECT", "")
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type":"application/json"}
+    if org:  headers["OpenAI-Organization"] = org
+    if proj: headers["OpenAI-Project"] = proj
+    sys_msg = (
+        "Tu es un assistant de trading intraday. Réponds UNIQUEMENT en JSON, rien d'autre.\n"
+        "Schéma exact: {\"symbol\":\"EURUSD\",\"direction\":\"BUY|SELL\",\"entry\":1.1000,\"sl\":1.0980,\"tp\":1.1040,\"reason\":\"texte court\"}\n"
+        "Règles: pour BUY -> sl < entry < tp. Pour SELL -> tp < entry < sl. Valeurs plausibles pour EURUSD ~ 1.x."
+    )
+    user_msg = f"Décide sur {symbol} en M5 maintenant. Donne symbol, direction, entry, sl, tp, reason au format JSON strict."
+
+    body = {
+        "model": OPENAI_MODEL,
+        "temperature": 0.2,
+        "messages": [
+            {"role":"system","content":sys_msg},
+            {"role":"user","content":user_msg}
+        ]
+    }
+    try:
+        r = requests.post(url, headers=headers, json=body, timeout=LLM_TIMEOUT_S)
+        r.raise_for_status()
+        txt = r.json()["choices"][0]["message"]["content"]
+        raw = _extract_json(txt) or {}
+    except Exception as e:
+        return None, f"llm_error:{e}"
+
+    # compléter symbol si absent
+    raw.setdefault("symbol", symbol)
+    # uniformiser direction
+    d = str(raw.get("direction") or raw.get("side") or raw.get("action") or "").upper()
+    if d in ("LONG","ACHAT","BUY"): raw["direction"]="BUY"
+    elif d in ("SHORT","VENTE","SELL"): raw["direction"]="SELL"
+    # entry fallback
+    if raw.get("entry") is None:
+        p = _to_float(raw.get("price") or raw.get("entry_price"))
+        if p is not None: raw["entry"]=p
+
+    setup, err = normalize_setup(raw)
+    if err: return None, f"normalize_error:{err}"
+    setup["reason"] = str(raw.get("reason") or "llm")[:120]
+    return setup, ""
+
+# ===== Entrée principale =====
+def decide(payload: Dict[str, Any], timeout: Optional[int]=None, **kwargs) -> Dict[str, Any]:
+    # health
+    if isinstance(payload, dict) and payload.get("probe") is True:
+        return _ok({"decisions":[{"action":"ok","reason":"probe"}]})
+
+    symbols = payload.get("symbols") or []
+    symbol = symbols[0] if isinstance(symbols, list) and symbols else "EURUSD"
+
+    # debug_force
+    dbg = (payload.get("debug_force") or "").strip().lower() if isinstance(payload, dict) else ""
+    if dbg in ("buy","sell"):
+        mock = {"symbol": symbol, "direction": dbg.upper(), "entry":1.100, "sl":1.098 if dbg=="buy" else 1.102,
+                "tp":1.104 if dbg=="buy" else 1.096, "source":"debug_force"}
+        setup, err = normalize_setup(mock)
+        if err: return _ok({"decisions": [], "status":"SKIP", "why": err})
+        return _ok({"decisions":[{"action": dbg, "reason": f"debug_force {dbg}", "setups":[setup]}]})
+
+    # LLM
+    setup, err = _llm_decide(symbol)
+    if err:
+        return _ok({"decisions":[{"action":"skip","reason":err,"setups":[]} ]})
+    return _ok({"decisions":[{"action": setup["direction"].lower(), "reason": setup.get("reason","llm"), "setups":[setup]}]})
+
+# --- Normalisation robuste des setups ---
+
+from typing import Any, Dict, List, Tuple, Union
+
+def _to_float(x):
+    if x is None:
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    if isinstance(x, str):
+        try:
+            return float(x.strip())
+        except Exception:
+            return None
+    return None
+
+_DIR_ALIASES = {
+    "buy": "BUY", "long": "BUY", "bull": "BUY", "up": "BUY",
+    "sell": "SELL", "short": "SELL", "bear": "SELL", "down": "SELL",
+}
+
+def _norm_direction(x: Any) -> Union[str, None]:
+    if not x:
+        return None
+    s = str(x).strip().lower()
+    return _DIR_ALIASES.get(s) or (s.upper() if s in ("BUY", "SELL") else None)
+
+def _norm_symbol(x: Any) -> Union[str, None]:
+    if not x:
+        return None
+    s = str(x).strip().upper().replace(" ", "")
+    return s if len(s) >= 3 else None
+
+def _compute_tp(entry: float, sl: float, direction: str, rrr: float) -> float:
+    if direction == "BUY":
+        return entry + rrr * abs(entry - sl)
+    else:
+        return entry - rrr * abs(entry - sl)
+
+def _valid_side(entry: float, sl: float, tp: float, direction: str) -> bool:
+    if direction == "BUY":
+        return sl < entry < tp
+    else:
+        return tp < entry < sl
+
+def _calc_rrr(entry: float, sl: float, tp: float) -> float:
+    den = abs(entry - sl)
+    num = abs(tp - entry)
+    return num / den if den > 0 else 0.0
+
+def normalize_setup(s: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+    if not isinstance(s, dict):
+        return {}, "REJECT: not a dict"
+
+symbol = _norm_symbol(
+        s.get("symbol") or s.get("ticker") or s.get("pair") or
+        s.get("instrument") or s.get("asset")
+    )
+    direction = _norm_direction(
+        s.get("direction") or s.get("side") or s.get("dir")
+    ) or s.get("side"))
+    entry = _to_float(
+        s.get("entry") or s.get("price") or s.get("entry_price") or
+        s.get("open") or s.get("entryPrice")
+    ) or s.get("price") or s.get("entry_price"))
+    sl = _to_float(
+        s.get("sl") or s.get("stop_loss") or s.get("stop") or
+        s.get("stoploss") or s.get("stopPrice")
+    ) or s.get("stop_loss") or s.get("stop"))
+    tp = _to_float(
+        s.get("tp") or s.get("take_profit") or s.get("target") or
+        s.get("takeprofit") or s.get("targetPrice")
+    ) or s.get("take_profit") or s.get("target"))
+    rrr = _to_float(s.get("rrr") or s.get("rr") or s.get("risk_reward") or s.get("reward_risk"))
+    lots = _to_float(s.get("lots") or s.get("size") or s.get("quantity"))
+    source = s.get("source")
+
+    if not symbol:
+        return {}, "REJECT: missing symbol"
+    if direction not in ("BUY", "SELL"):
+        return {}, "REJECT: missing/invalid direction"
+    if entry is None or entry <= 0:
+        return {}, "REJECT: missing/invalid entry"
+    if sl is None or sl <= 0:
+        return {}, "REJECT: missing/invalid sl"
+
+    if (tp is None or tp <= 0) and (rrr is not None and rrr > 0):
+        tp = _compute_tp(entry, sl, direction, rrr)
+
+    if (rrr is None or rrr <= 0) and (tp is not None and tp > 0):
+        rrr = _calc_rrr(entry, sl, tp)
+
+    if tp is not None and not _valid_side(entry, sl, tp, direction):
+        if _valid_side(entry, tp, sl, direction):
+            sl, tp = tp, sl
+        elif rrr is not None and rrr > 0:
+            tp = _compute_tp(entry, sl, direction, rrr)
+
+    if tp is None or tp <= 0:
+        return {}, "REJECT: missing/invalid tp"
+    if not _valid_side(entry, sl, tp, direction):
+        return {}, f"REJECT: inconsistent levels for {direction} (sl/entry/tp)"
+
+    rrr = _calc_rrr(entry, sl, tp)
+    if rrr <= 0:
+        return {}, "REJECT: non-positive RRR"
+    if rrr > 10:
+        return {}, "REJECT: RRR > 10 looks invalid"
+
+    out = {
+        "symbol": symbol,
+        "direction": direction,
+        "entry": float(entry),
+        "sl": float(sl),
+        "tp": float(tp),
+        "rrr": float(rrr),
+    }
+    if lots and lots > 0:
+        out["lots"] = float(lots)
+    if source:
+        out["source"] = str(source)
+
+    return out, "OK"
+
+
+def normalize_setups(setups):
+    """
+    Accepte:
+      - list de setups
+      - dict setup unique
+      - dict wrapper: {"setups":[...]} ou {"candidates":[...]} ou {"decision": {"setups":[...]}}
+      - str JSON contenant l'un des formats ci-dessus
+    """
+    valids, reasons = [], []
+
+    # str JSON → dict/list
+    if isinstance(setups, str):
+        obj = extract_json(setups)
+        if obj is not None:
+            setups = obj
+
+    # wrappers connus
+    if isinstance(setups, dict):
+        for k in ("setups","candidates"):
+            if isinstance(setups.get(k), list):
+                setups = setups[k]
+                break
+        # nested {"decision": {"setups":[...]}}
+        if isinstance(setups, dict) and isinstance(setups.get("decision",{}).get("setups"), list):
+            setups = setups["decision"]["setups"]
+
+    if setups is None:
+        return [], ["REJECT: setups is None"]
+
+    if isinstance(setups, list):
+        for i, s in enumerate(setups):
+            norm, why = normalize_setup(s if isinstance(s, dict) else {"symbol":None})
+            if norm: valids.append(norm)
+            reasons.append(f"{i}: {why}")
+        return valids, reasons
+
+    if isinstance(setups, dict):
+        norm, why = normalize_setup(setups)
+        if norm: valids.append(norm)
+        reasons.append(why)
+        return valids, reasons
+
+    return [], ["REJECT: setups not list/dict"]
+
+
+    if isinstance(setups, list):
+        for i, s in enumerate(setups):
+            norm, why = normalize_setup(s)
+            if norm:
+                valids.append(norm)
+            reasons.append(f"{i}: {why}")
+        return valids, reasons
+
+    return [], ["REJECT: setups not list/dict"]
+# === BEGIN normalization_v2 ===
+from typing import Any, Dict, List, Tuple, Union
+import json, re
+
+# Directions
+_DIR_ALIASES = {
+    "buy":"BUY","long":"BUY","bull":"BUY","up":"BUY",
+    "sell":"SELL","short":"SELL","bear":"SELL","down":"SELL",
+}
+
+def _to_float(x):
+    if x is None: return None
+    if isinstance(x,(int,float)): return float(x)
+    if isinstance(x,str):
+        try: return float(x.strip())
+        except: return None
+    return None
+
+def _norm_direction(x: Any) -> Union[str,None]:
+    if not x: return None
+    s=str(x).strip().lower()
+    return _DIR_ALIASES.get(s) or (s.upper() if s in ("buy","sell","BUY","SELL") else None)
+
+def _norm_symbol(x: Any) -> Union[str,None]:
+    if not x: return None
+    s=str(x).strip().upper().replace(" ","")
+    return s if len(s)>=3 else None
+
+def _compute_tp(entry: float, sl: float, direction: str, rrr: float) -> float:
+    return entry + rrr*abs(entry-sl) if direction=="BUY" else entry - rrr*abs(entry-sl)
+
+def _valid_side(entry: float, sl: float, tp: float, direction: str) -> bool:
+    return (sl < entry < tp) if direction=="BUY" else (tp < entry < sl)
+
+def _calc_rrr(entry: float, sl: float, tp: float) -> float:
+    den=abs(entry-sl); num=abs(tp-entry)
+    return num/den if den>0 else 0.0
+
+# ---- JSON helpers ----
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.I)
+
+def extract_json_v2(text):
+    if not isinstance(text,str): return None
+    m=_JSON_BLOCK_RE.search(text)
+    cand=m.group(1).strip() if m else text.strip()
+    try: return json.loads(cand)
+    except Exception: pass
+    # tentative simple: chercher premier { ou [
+    i=min([j for j in (cand.find("{"),cand.find("[")) if j!=-1], default=-1)
+    if i>=0:
+        sub=cand[i:]
+        for k in range(len(sub),1,-1):
+            try: return json.loads(sub[:k])
+            except Exception: pass
+    return None
+
+# ---- Freeform "PLACE BUY ..." ----
+_FREEFORM_DIR_SYM_RE = re.compile(r'(?i)\b(?:PLACE\s+)?(BUY|SELL)\s+([A-Z0-9._/]{3,20})')
+def _grab_num(label, text):
+    m=re.search(r'(?i)\b'+re.escape(label)+r'\s*[:=]\s*([-+]?\d+(?:\.\d+)?)', text)
+    return float(m.group(1)) if m else None
+
+def _parse_freeform_setups(text):
+    if not isinstance(text,str) or len(text)<8: return []
+    m=_FREEFORM_DIR_SYM_RE.search(text)
+    if not m: return []
+    direction, symbol = m.group(1).upper(), m.group(2).upper().replace(" ","")
+    entry = _grab_num("entry",text) or _grab_num("price",text)
+    sl    = _grab_num("sl",text) or _grab_num("stop",text) or _grab_num("stop_loss",text)
+    tp    = _grab_num("tp",text) or _grab_num("take_profit",text) or _grab_num("target",text)
+    rrr   = _grab_num("rrr",text) or _grab_num("rr",text) or _grab_num("reward_risk",text)
+    lots  = _grab_num("lots",text) or _grab_num("size",text) or _grab_num("quantity",text)
+
+    out={"symbol":symbol,"direction":direction,"source":"freeform"}
+    if entry is not None: out["entry"]=entry
+    if sl    is not None: out["sl"]=sl
+    if tp    is not None: out["tp"]=tp
+    if rrr   is not None: out["rrr"]=rrr
+    if lots  is not None: out["lots"]=lots
+    return [out]
+
+# ---- Normalisation v2 ----
+def normalize_setup_v2(s: Dict[str,Any]) -> Tuple[Dict[str,Any], str]:
+    if not isinstance(s,dict): return {}, "REJECT: not a dict"
+
+    symbol = _norm_symbol(s.get("symbol") or s.get("ticker") or s.get("pair") or s.get("instrument") or s.get("asset"))
+    direction = _norm_direction(s.get("direction") or s.get("side") or s.get("dir"))
+    entry = _to_float(s.get("entry") or s.get("price") or s.get("entry_price") or s.get("open") or s.get("entryPrice"))
+    sl = _to_float(s.get("sl") or s.get("stop_loss") or s.get("stop") or s.get("stoploss") or s.get("stopPrice"))
+    tp = _to_float(s.get("tp") or s.get("take_profit") or s.get("target") or s.get("takeprofit") or s.get("targetPrice"))
+    rrr = _to_float(s.get("rrr") or s.get("rr") or s.get("risk_reward") or s.get("reward_risk"))
+    lots = _to_float(s.get("lots") or s.get("size") or s.get("quantity"))
+    source = s.get("source")
+
+    if not symbol: return {}, "REJECT: missing symbol"
+    if direction not in ("BUY","SELL"): return {}, "REJECT: missing/invalid direction"
+    if entry is None or entry<=0: return {}, "REJECT: missing/invalid entry"
+    if sl is None or sl<=0: return {}, "REJECT: missing/invalid sl"
+
+    if (tp is None or tp<=0) and (rrr is not None and rrr>0):
+        tp=_compute_tp(entry,sl,direction,rrr)
+    if (rrr is None or rrr<=0) and (tp is not None and tp>0):
+        rrr=_calc_rrr(entry,sl,tp)
+
+    if tp is not None and not _valid_side(entry,sl,tp,direction):
+        if _valid_side(entry,tp,sl,direction): sl,tp = tp,sl
+        elif rrr is not None and rrr>0: tp=_compute_tp(entry,sl,direction,rrr)
+
+    if tp is None or tp<=0: return {}, "REJECT: missing/invalid tp"
+    if not _valid_side(entry,sl,tp,direction): return {}, f"REJECT: inconsistent levels for {direction}"
+
+    rrr=_calc_rrr(entry,sl,tp)
+    if rrr<=0: return {}, "REJECT: non-positive RRR"
+    if rrr>10: return {}, "REJECT: RRR > 10 looks invalid"
+
+    out={"symbol":symbol,"direction":direction,"entry":float(entry),"sl":float(sl),"tp":float(tp),"rrr":float(rrr)}
+    if lots and lots>0: out["lots"]=float(lots)
+    if source: out["source"]=str(source)
+    return out,"OK"
+
+def normalize_setups_v2(setups):
+    """
+    Accepte list/dict, wrappers {"setups":[...]},{"candidates":[...]},{"decision":{"setups":[...]}}
+    ou str (JSON ou texte libre "PLACE BUY ...").
+    """
+    valids,reasons=[],[]
+
+    if isinstance(setups,str):
+        obj=extract_json_v2(setups)
+        if obj is not None:
+            setups=obj
+        else:
+            ff=_parse_freeform_setups(setups)
+            if ff: setups=ff
+
+    if setups is None:
+        return [], ["REJECT: setups is None"]
+
+    if isinstance(setups,dict):
+        for k in ("setups","candidates"):
+            if isinstance(setups.get(k),list):
+                setups=setups[k]; break
+        if isinstance(setups,dict) and isinstance(setups.get("decision",{}).get("setups"),list):
+            setups=setups["decision"]["setups"]
+
+    if isinstance(setups,list):
+        for i,item in enumerate(setups):
+            norm,why=normalize_setup_v2(item if isinstance(item,dict) else {"symbol":None})
+            if norm: valids.append(norm)
+            reasons.append(f"{i}: {why}")
+        return valids,reasons
+
+    if isinstance(setups,dict):
+        norm,why=normalize_setup_v2(setups)
+        if norm: valids.append(norm)
+        reasons.append(why)
+        return valids,reasons
+
+    return [], ["REJECT: setups not list/dict"]
+
+# expose v2
+normalize_setup = normalize_setup_v2
+normalize_setups = normalize_setups_v2
+# === END normalization_v2 ===

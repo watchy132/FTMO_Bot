@@ -1,0 +1,5 @@
+ts,symbol,direction,entry,sl,tp,risk_pct,lot,rrr_planned,action,reason,pnl,equity
+2025-09-11T19:42:18.232718+00:00,ENV_CHECK,-,0,0,0,0,0,0,CHECK,init,0,0
+TEST,EURUSD,1.0,OK
+TEST,EURUSD,1.0,OK
+2025-09-20T00:22:29.423420+00:00,ENV_CHECK,-,0,0,0,0,0,0,CHECK,init,0,0

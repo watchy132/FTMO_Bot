@@ -1,0 +1,1 @@
+{'choices': [{'message': {'content': '```json\n[{"symbol":"EURUSD","direction":"BUY","entry":1.172,"sl":1.17,"tp":1.175}]\n```'}}]}

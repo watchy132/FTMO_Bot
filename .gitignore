@@ -1,0 +1,22 @@
+# secrets & env
+.env
+*.key
+*.pem
+
+# logs & pid
+/tmp/
+logs/
+*.log
+*.pid
+
+# caches & OS
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+.envrc
+
+# sauvegardes locales
+bridge_server.py.bak_*
+gpt_bridge_*.py.bak_*

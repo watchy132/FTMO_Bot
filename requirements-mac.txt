@@ -1,0 +1,6 @@
+pandas
+python-dotenv
+openai
+pydantic
+requests
+flask
