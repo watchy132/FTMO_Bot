@@ -17,3 +17,7 @@ jobs:
       - run: pip install black flake8
       - run: black --check .
       - run: flake8 .
+   - name: Black (check only)
+  run: |
+    python -m pip install -U black
+    black --check --extend-exclude '(^|/)(runner_(prev|bak|backup|fix).*\.py|gpt_bridge_.*(bad|bak).*\.py|.*\.ipynb$)' .
