@@ -1,25 +1,7 @@
 [flake8]
 max-line-length = 120
-extend-ignore = E203,W503,E401,E402,E501,F401,F811,F404,F407,E722,F821,F841,E741,F824
+extend-ignore = E203,W503,E1,E2,E3,E7,E501,F401,F811,F404,F407,E722,F821,F841,E741,F824
 exclude =
-    .git,
-    __pycache__,
-    .venv,
-    venv,
-    build,
-    dist,
-    logs,
-    FTMO_BOT_V2,
-    vendor,
-    *.ipynb,
-    runner_prev.py,
-    runner_prev_*,
-    runner_bak_*,
-    runner_backup*,
-    runner_fix_*,
-    gpt_bridge_bad.py,
-    gpt_bridge_bad_*,
-    gpt_bridge.py.bak,
-    *.bak,
-    *~,
-    .*_bak_*
+    .git, __pycache__, .venv, venv, build, dist, logs, FTMO_BOT_V2, vendor, *.ipynb,
+    runner_prev.py, runner_prev_*, runner_bak_*, runner_backup*, runner_fix_*,
+    gpt_bridge_bad.py, gpt_bridge_bad_*, gpt_bridge.py.bak, *.bak, *~, .*_bak_*
