@@ -2,6 +2,7 @@ def some_utility_function():
     # This is a placeholder for a utility function.
     pass
 
+
 def another_utility_function(param):
     # This is a placeholder for another utility function.
     return param
@@ -48,9 +49,6 @@ def backtest_signals(prices, signals):
     # total return as compounded returns across trades assuming full allocation per trade
     total = 1.0
     for t in trades:
-        total *= (1 + t)
+        total *= 1 + t
 
-    return {
-        'total_return': (total - 1.0),
-        'trades': trades
-    }
+    return {"total_return": (total - 1.0), "trades": trades}

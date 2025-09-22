@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
 import math
 import statistics
+
 try:
     import matplotlib.pyplot as plt
 except Exception:
@@ -22,18 +23,19 @@ class Backtester:
         self.commission = float(commission)
         self.slippage = float(slippage)
 
-    def run(self,
+    def run(
+        self,
         prices: List[float],
         signals: List[int],
         risk_per_trade: float = 0.01,
         leverage: float = 1.0,
-        position_sizing: str = 'fixed',
+        position_sizing: str = "fixed",
         highs: Optional[List[float]] = None,
         lows: Optional[List[float]] = None,
         period: int = 14,
         annualization: int = 252,
-        atr_method: str = 'sma'
-        ) -> Dict:
+        atr_method: str = "sma",
+    ) -> Dict:
         if not prices or not signals or len(prices) != len(signals):
             raise ValueError("prices and signals must be non-empty and the same length")
 
@@ -49,7 +51,7 @@ class Backtester:
 
         # precompute ATR if requested
         atr = None
-        if position_sizing == 'atr':
+        if position_sizing == "atr":
             # compute TR series and ATR using highs/lows/closes if provided
             tr = []
             for j in range(len(prices)):
@@ -59,7 +61,7 @@ class Backtester:
                 tr_val = max(high - low, abs(high - prev), abs(low - prev))
                 tr.append(tr_val)
             atr = [None] * len(tr)
-            if atr_method == 'sma':
+            if atr_method == "sma":
                 # simple moving average ATR
                 cum = 0.0
                 for j, t in enumerate(tr):
@@ -70,7 +72,7 @@ class Backtester:
                         atr[j] = cum / period
                     else:
                         atr[j] = None
-            elif atr_method == 'wilder':
+            elif atr_method == "wilder":
                 # Wilder's EMA-style ATR
                 # initialize first ATR as simple average of first 'period' TRs when available
                 prev_atr = None
@@ -94,7 +96,7 @@ class Backtester:
             # entry
             if position == 0 and s == 1:
                 # determine units using either fixed risk fraction or ATR-based sizing
-                if position_sizing == 'fixed' or atr is None or atr[i] is None:
+                if position_sizing == "fixed" or atr is None or atr[i] is None:
                     # allocate risk_per_trade fraction of equity (simplified)
                     budget = equity * risk_per_trade * leverage
                     entry_units = budget / p if p > 0 else 0.0
@@ -105,13 +107,23 @@ class Backtester:
                     if current_atr <= 0:
                         entry_units = 0.0
                     else:
-                        entry_units = (risk_per_trade * equity * leverage) / (current_atr * p)
+                        entry_units = (risk_per_trade * equity * leverage) / (
+                            current_atr * p
+                        )
                 entry_price = p * (1 + self.slippage)
                 # commission on buy
                 commission_cost = entry_units * entry_price * self.commission
                 equity -= commission_cost
                 position = 1
-                trades.append({'type': 'entry', 'index': i, 'price': entry_price, 'units': entry_units, 'commission': commission_cost})
+                trades.append(
+                    {
+                        "type": "entry",
+                        "index": i,
+                        "price": entry_price,
+                        "units": entry_units,
+                        "commission": commission_cost,
+                    }
+                )
 
             # exit
             elif position == 1 and s == 0:
@@ -120,7 +132,16 @@ class Backtester:
                 commission_cost = entry_units * exit_price * self.commission
                 equity += pnl
                 equity -= commission_cost
-                trades.append({'type': 'exit', 'index': i, 'price': exit_price, 'units': entry_units, 'pnl': pnl, 'commission': commission_cost})
+                trades.append(
+                    {
+                        "type": "exit",
+                        "index": i,
+                        "price": exit_price,
+                        "units": entry_units,
+                        "pnl": pnl,
+                        "commission": commission_cost,
+                    }
+                )
                 # reset
                 position = 0
                 entry_price = None
@@ -138,7 +159,16 @@ class Backtester:
             commission_cost = entry_units * last_price * self.commission
             equity += pnl
             equity -= commission_cost
-            trades.append({'type': 'exit', 'index': len(prices) - 1, 'price': last_price, 'units': entry_units, 'pnl': pnl, 'commission': commission_cost})
+            trades.append(
+                {
+                    "type": "exit",
+                    "index": len(prices) - 1,
+                    "price": last_price,
+                    "units": entry_units,
+                    "pnl": pnl,
+                    "commission": commission_cost,
+                }
+            )
             equity_curve[-1] = equity
             if equity > peak:
                 peak = equity
@@ -189,38 +219,42 @@ class Backtester:
                 except Exception:
                     cagr = None
         if returns:
-            ann_vol = statistics.pstdev(returns) * math.sqrt(annualization) if len(returns) > 1 else 0.0
+            ann_vol = (
+                statistics.pstdev(returns) * math.sqrt(annualization)
+                if len(returns) > 1
+                else 0.0
+            )
 
         # compute win rate from trades (exits contain 'pnl')
-        exit_pnls = [t['pnl'] for t in trades if t.get('type') == 'exit' and 'pnl' in t]
+        exit_pnls = [t["pnl"] for t in trades if t.get("type") == "exit" and "pnl" in t]
         if exit_pnls:
             wins = sum(1 for p in exit_pnls if p > 0)
             win_rate = wins / len(exit_pnls)
 
         result = {
-            'equity_curve': equity_curve,
-            'trades': trades,
-            'total_return': total_return,
-            'max_drawdown': max_drawdown,
-            'returns': returns,
-            'sharpe': sharpe,
-            'sortino': sortino,
-            'atr': atr,
-            'cagr': cagr,
-            'annual_volatility': ann_vol,
-            'win_rate': win_rate,
+            "equity_curve": equity_curve,
+            "trades": trades,
+            "total_return": total_return,
+            "max_drawdown": max_drawdown,
+            "returns": returns,
+            "sharpe": sharpe,
+            "sortino": sortino,
+            "atr": atr,
+            "cagr": cagr,
+            "annual_volatility": ann_vol,
+            "win_rate": win_rate,
         }
 
         return result
 
-    def plot_equity(self, equity_curve: List[float], filename: str = 'equity.png'):
+    def plot_equity(self, equity_curve: List[float], filename: str = "equity.png"):
         """Save a plot of the equity curve to `filename`. Requires matplotlib."""
         if plt is None:
             raise RuntimeError("matplotlib is not available")
         fig, ax = plt.subplots()
-        ax.plot(equity_curve, label='Equity')
-        ax.set_xlabel('Period')
-        ax.set_ylabel('Equity')
+        ax.plot(equity_curve, label="Equity")
+        ax.set_xlabel("Period")
+        ax.set_ylabel("Equity")
         ax.legend()
         fig.tight_layout()
         fig.savefig(filename)

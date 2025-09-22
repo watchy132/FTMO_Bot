@@ -41,6 +41,7 @@ USE_GPT = True
 client = None
 try:
     from openai import OpenAI
+
     if not OPENAI_KEY:
         raise RuntimeError("OPENAI_API_KEY manquante")
     client = OpenAI(api_key=OPENAI_KEY)
@@ -72,7 +73,10 @@ SCHEMA = {
                     "symbol": {"type": "string"},
                     "setup_id": {"type": "string"},
                     "side": {"type": "string", "enum": ["buy", "sell"]},
-                    "entry_type": {"type": "string", "enum": ["market", "limit", "stop"]},
+                    "entry_type": {
+                        "type": "string",
+                        "enum": ["market", "limit", "stop"],
+                    },
                     "entry": {"type": "number"},
                     "sl": {"type": "number"},
                     "tp": {"type": "number"},
@@ -97,12 +101,15 @@ SYSTEM_PROMPT = (
 
 # ===================== MT5 utils (gracieux si absent) =====================
 
+
 def _try_import_mt5():
     try:
         import MetaTrader5 as mt5
+
         return mt5
     except Exception:
         return None
+
 
 def init_mt5():
     """Init MT5 si dispo. Renvoie True/False."""
@@ -120,6 +127,7 @@ def init_mt5():
         print("Erreur init MT5:", e)
         return False
 
+
 def shutdown_mt5():
     mt5 = _try_import_mt5()
     if mt5:
@@ -127,6 +135,7 @@ def shutdown_mt5():
             mt5.shutdown()
         except Exception:
             pass
+
 
 def symbol_spread_pips(symbol: str) -> float:
     """Spread estimé en pips (fallback à 0.0 si MT5 hors service)."""
@@ -143,7 +152,9 @@ def symbol_spread_pips(symbol: str) -> float:
         pass
     return 0.0
 
+
 # ===================== Snapshot marché =====================
+
 
 def snapshot_market(symbols):
     """
@@ -173,9 +184,13 @@ def snapshot_market(symbols):
             data[s] = {"error": str(e)}
     return data
 
+
 # ===================== Appel GPT =====================
 
-def call_gpt_analysis(market_snapshot: dict, equity: float, dd_day: float, dd_total: float) -> dict:
+
+def call_gpt_analysis(
+    market_snapshot: dict, equity: float, dd_day: float, dd_total: float
+) -> dict:
     """
     Envoie le snapshot à GPT. Retourne un dict conforme au SCHEMA.
     Fallback local si USE_GPT=False ou erreur appel.
@@ -221,12 +236,15 @@ def call_gpt_analysis(market_snapshot: dict, equity: float, dd_day: float, dd_to
             "setups": [],
         }
 
+
 # ===================== Sessions & boucle =====================
+
 
 def in_session_utc() -> bool:
     """Session Londres/NY simple: 07:00–23:00 UTC."""
     now = datetime.now(timezone.utc).time()
-    return (7 <= now.hour < 23)
+    return 7 <= now.hour < 23
+
 
 def run_trading_cycle(symbols):
     """
@@ -246,6 +264,7 @@ def run_trading_cycle(symbols):
     print(f"Setups GPT reçus: {len(setups)}")
     for s in setups[:3]:
         print("  •", s)
+
 
 def run_scheduler():
     symbols = ["EURUSD", "XAUUSD", "BTCUSD"]  # adapte si besoin
@@ -270,6 +289,7 @@ def run_scheduler():
 
     finally:
         shutdown_mt5()
+
 
 # ===================== Test direct =====================
 

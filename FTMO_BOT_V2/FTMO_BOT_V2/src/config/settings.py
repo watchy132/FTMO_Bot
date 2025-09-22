@@ -12,17 +12,18 @@ LOG_LEVEL = "INFO"
 
 
 class Settings:
-	"""Lightweight Settings object used by tests and for compatibility.
+    """Lightweight Settings object used by tests and for compatibility.
 
-	Attributes mirror module-level constants for convenience.
-	"""
-	def __init__(self):
-		self.API_KEY = API_KEY
-		self.API_SECRET = API_SECRET
-		self.BASE_URL = BASE_URL
-		self.TRADING_PAIR = TRADING_PAIR
-		self.ORDER_SIZE = ORDER_SIZE
-		self.SLIPPAGE = SLIPPAGE
-		self.TIMEFRAME = TIMEFRAME
-		self.MAX_OPEN_TRADES = MAX_OPEN_TRADES
-		self.LOG_LEVEL = LOG_LEVEL
+    Attributes mirror module-level constants for convenience.
+    """
+
+    def __init__(self):
+        self.API_KEY = API_KEY
+        self.API_SECRET = API_SECRET
+        self.BASE_URL = BASE_URL
+        self.TRADING_PAIR = TRADING_PAIR
+        self.ORDER_SIZE = ORDER_SIZE
+        self.SLIPPAGE = SLIPPAGE
+        self.TIMEFRAME = TIMEFRAME
+        self.MAX_OPEN_TRADES = MAX_OPEN_TRADES
+        self.LOG_LEVEL = LOG_LEVEL

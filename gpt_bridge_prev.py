@@ -2,13 +2,16 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
 
 def _ok(d: Dict[str, Any]) -> Dict[str, Any]:
     d.setdefault("ok", True)
     d.setdefault("ts", _now_ms())
     return d
+
 
 def _decision(symbol: str, side: str) -> Dict[str, Any]:
     """
@@ -36,10 +39,13 @@ def _decision(symbol: str, side: str) -> Dict[str, Any]:
         "take_profit": tp,
         "rrr": 2.0,
         "risk_r": 1.0,
-        "reason": f"debug_force {side}"
+        "reason": f"debug_force {side}",
     }
 
-def decide(payload: Dict[str, Any], timeout: Optional[int] = None, **kwargs) -> Dict[str, Any]:
+
+def decide(
+    payload: Dict[str, Any], timeout: Optional[int] = None, **kwargs
+) -> Dict[str, Any]:
     """
     Fonction appelée par bridge_server:/decide.
     Retourne des setups normalisés prêts pour runner/test_harness.
@@ -52,7 +58,11 @@ def decide(payload: Dict[str, Any], timeout: Optional[int] = None, **kwargs) -> 
     if not symbols:
         symbols = ["EURUSD"]
 
-    dbg = (payload.get("debug_force") or "").strip().lower() if isinstance(payload, dict) else ""
+    dbg = (
+        (payload.get("debug_force") or "").strip().lower()
+        if isinstance(payload, dict)
+        else ""
+    )
     if dbg in ("buy", "sell"):
         return _ok({"decisions": [_decision(symbols[0], dbg)]})
 

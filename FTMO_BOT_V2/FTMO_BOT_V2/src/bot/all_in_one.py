@@ -2,6 +2,7 @@
 
 # This file contains the main logic for the trading bot, integrating various strategies and functionalities.
 
+
 class TradingBot:
     def __init__(self, settings=None):
         """Initialize the TradingBot.
@@ -36,7 +37,7 @@ class TradingBot:
         # If a Strategy object was passed directly, execute it.
         strategy = None
         # Duck-typing check for an object with an execute method
-        if strategy_or_data is not None and hasattr(strategy_or_data, 'execute'):
+        if strategy_or_data is not None and hasattr(strategy_or_data, "execute"):
             strategy = strategy_or_data
         else:
             strategy = self.current_strategy
@@ -62,6 +63,7 @@ class TradingBot:
         result = self.execute_strategy(data)
         print("TradingBot: execute_strategy returned:", result)
         return result
+
 
 if __name__ == "__main__":
     bot = TradingBot()

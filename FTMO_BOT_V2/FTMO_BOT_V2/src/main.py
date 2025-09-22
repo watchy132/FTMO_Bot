@@ -3,6 +3,7 @@
 from bot.all_in_one import TradingBot
 from bot.strategies import MovingAverageStrategy
 
+
 def main():
     print("Starting FTMO_BOT_V2...")
     bot = TradingBot()
@@ -14,6 +15,7 @@ def main():
     print("Registered default strategy: Moving Average Strategy")
     bot.start_trading()
     print("Bot start requested.")
+
 
 if __name__ == "__main__":
     main()

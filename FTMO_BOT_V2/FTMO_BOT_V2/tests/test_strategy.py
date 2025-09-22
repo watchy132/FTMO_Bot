@@ -18,13 +18,13 @@ def test_moving_average_crossover_profitable_on_uptrend():
     assert len(signals) == len(prices)
 
     result = backtest_signals(prices, signals)
-    total_return = result['total_return']
-    trades = result['trades']
+    total_return = result["total_return"]
+    trades = result["trades"]
 
     # On a steady uptrend, expect at least one trade and positive return
     assert len(trades) >= 1
     assert total_return > 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pytest.main([__file__])
