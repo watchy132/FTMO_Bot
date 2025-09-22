@@ -11,6 +11,7 @@ except Exception as e:
 
 CSV_PATH = "journal_ftmo.csv"
 
+
 def check_openai_key() -> bool:
     key = os.getenv("OPENAI_API_KEY", "").strip()
     if not key:
@@ -18,6 +19,7 @@ def check_openai_key() -> bool:
         return False
     print("[OK] OPENAI_API_KEY chargée")
     return True
+
 
 def check_mt5() -> bool:
     if not mt5.initialize():
@@ -30,10 +32,22 @@ def check_mt5() -> bool:
     mt5.shutdown()
     return True
 
+
 def check_csv_write() -> bool:
     header = [
-        "ts","symbol","direction","entry","sl","tp","risk_pct",
-        "lot","rrr_planned","action","reason","pnl","equity"
+        "ts",
+        "symbol",
+        "direction",
+        "entry",
+        "sl",
+        "tp",
+        "risk_pct",
+        "lot",
+        "rrr_planned",
+        "action",
+        "reason",
+        "pnl",
+        "equity",
     ]
     exists = os.path.exists(CSV_PATH)
     try:
@@ -41,15 +55,29 @@ def check_csv_write() -> bool:
             w = csv.writer(f)
             if not exists:
                 w.writerow(header)
-            w.writerow([
-                datetime.now(timezone.utc).isoformat(),
-                "ENV_CHECK","-",0,0,0,0,0,0,"CHECK","init",0,0
-            ])
+            w.writerow(
+                [
+                    datetime.now(timezone.utc).isoformat(),
+                    "ENV_CHECK",
+                    "-",
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    "CHECK",
+                    "init",
+                    0,
+                    0,
+                ]
+            )
         print(f"[OK] Écriture CSV → {CSV_PATH}")
         return True
     except Exception as e:
         print(f"[X] Écriture CSV impossible: {e}")
         return False
+
 
 def main():
     ok = True
@@ -59,6 +87,7 @@ def main():
     print("\n=== RÉSUMÉ ===")
     print("OK" if ok else "ERREURS détectées")
     sys.exit(0 if ok else 2)
+
 
 if __name__ == "__main__":
     main()

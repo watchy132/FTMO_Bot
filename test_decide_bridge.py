@@ -4,7 +4,13 @@ import json, gpt_bridge
 
 payload = {
     "setups": [
-        {"symbol": "EURUSD", "direction": "buy", "entry": 1.09, "sl": 1.088, "tp": 1.094}
+        {
+            "symbol": "EURUSD",
+            "direction": "buy",
+            "entry": 1.09,
+            "sl": 1.088,
+            "tp": 1.094,
+        }
     ]
 }
 

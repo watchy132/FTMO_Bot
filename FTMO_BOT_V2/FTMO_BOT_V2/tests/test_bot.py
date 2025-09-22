@@ -1,9 +1,12 @@
 # filepath: /FTMO_BOT_V2/tests/test_bot.py
 
 import unittest
-from src.bot.all_in_one import TradingBot  # Adjust the import based on the actual class/function names
+from src.bot.all_in_one import (
+    TradingBot,
+)  # Adjust the import based on the actual class/function names
 from src.bot.strategies import StrategyA, StrategyB  # Example strategies
 from src.config.settings import Settings  # Example settings import
+
 
 class TestTradingBot(unittest.TestCase):
 
@@ -30,5 +33,6 @@ class TestTradingBot(unittest.TestCase):
         result = self.bot.execute_strategy(self.strategy_b)
         self.assertFalse(result)  # Assuming the strategy returns a boolean
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
