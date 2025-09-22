@@ -1,10 +1,11 @@
 # File: /FTMO_BOT_V2/src/bot/trading.py
 
+
 class Trading:
     def __init__(self, api_client):
         self.api_client = api_client
 
-    def place_order(self, symbol, quantity, order_type='market'):
+    def place_order(self, symbol, quantity, order_type="market"):
         """
         Places an order in the market.
 
@@ -13,11 +14,7 @@ class Trading:
         :param order_type: The type of order ('market' or 'limit').
         :return: Response from the API after placing the order.
         """
-        order_data = {
-            'symbol': symbol,
-            'quantity': quantity,
-            'order_type': order_type
-        }
+        order_data = {"symbol": symbol, "quantity": quantity, "order_type": order_type}
         response = self.api_client.place_order(order_data)
         return response
 

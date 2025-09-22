@@ -5,6 +5,7 @@ from src.bot.all_in_one import TradingBot  # Adjust the import based on the actu
 from src.bot.strategies import StrategyA, StrategyB  # Example strategies
 from src.config.settings import Settings  # Example settings import
 
+
 class TestTradingBot(unittest.TestCase):
 
     def setUp(self):
@@ -30,5 +31,6 @@ class TestTradingBot(unittest.TestCase):
         result = self.bot.execute_strategy(self.strategy_b)
         self.assertFalse(result)  # Assuming the strategy returns a boolean
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

@@ -2,13 +2,16 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
 
 def _ok(d: Dict[str, Any]) -> Dict[str, Any]:
     d.setdefault("ok", True)
     d.setdefault("ts", _now_ms())
     return d
+
 
 def _decision(symbol: str, side: str) -> Dict[str, Any]:
     """
@@ -36,8 +39,9 @@ def _decision(symbol: str, side: str) -> Dict[str, Any]:
         "take_profit": tp,
         "rrr": 2.0,
         "risk_r": 1.0,
-        "reason": f"debug_force {side}"
+        "reason": f"debug_force {side}",
     }
+
 
 def decide(payload: Dict[str, Any], timeout: Optional[int] = None, **kwargs) -> Dict[str, Any]:
     """

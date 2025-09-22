@@ -16,25 +16,25 @@ def test_backtester_returns_positive_on_uptrend():
     bt = Backtester(initial_capital=10000.0, commission=0.0005, slippage=0.0002)
     result = bt.run(prices, signals, risk_per_trade=0.02, leverage=1.0)
 
-    assert 'total_return' in result
-    assert result['total_return'] > 0
+    assert "total_return" in result
+    assert result["total_return"] > 0
     # basic sanity checks
-    assert result['max_drawdown'] >= 0
-    assert isinstance(result['equity_curve'], list)
+    assert result["max_drawdown"] >= 0
+    assert isinstance(result["equity_curve"], list)
 
     # new metrics
-    assert 'sharpe' in result
-    assert 'sortino' in result
-    assert 'cagr' in result
-    assert 'annual_volatility' in result
-    assert 'win_rate' in result
+    assert "sharpe" in result
+    assert "sortino" in result
+    assert "cagr" in result
+    assert "annual_volatility" in result
+    assert "win_rate" in result
 
     # run with ATR-based sizing and Wilder ATR
     bt2 = Backtester(initial_capital=10000.0, commission=0.0005, slippage=0.0002)
-    res2 = bt2.run(prices, signals, risk_per_trade=0.02, leverage=1.0, position_sizing='atr', atr_method='wilder')
-    assert res2['total_return'] > 0
-    assert res2['atr'] is not None
+    res2 = bt2.run(prices, signals, risk_per_trade=0.02, leverage=1.0, position_sizing="atr", atr_method="wilder")
+    assert res2["total_return"] > 0
+    assert res2["atr"] is not None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pytest.main([__file__])
